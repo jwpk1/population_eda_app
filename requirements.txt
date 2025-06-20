@@ -1,7 +1,7 @@
 streamlit
 pyrebase4
-setuptools
 pandas
 numpy
 matplotlib
 seaborn
+scikit-learn
