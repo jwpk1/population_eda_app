@@ -1,11 +1,11 @@
 import streamlit as st
 import pyrebase
-import time
 import io
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.linear_model import LinearRegression
 
 # ---------------------
 # Firebase 설정
@@ -15,324 +15,273 @@ firebase_config = {
     "authDomain": "sw-projects-49798.firebaseapp.com",
     "databaseURL": "https://sw-projects-49798-default-rtdb.firebaseio.com",
     "projectId": "sw-projects-49798",
-    "storageBucket": "sw-projects-49798.firebasestorage.app",
-    "messagingSenderId": "812186368395",
-    "appId": "1:812186368395:web:be2f7291ce54396209d78e"
+    "storageBucket": "sw-projects-49798.appspot.com",
+    "messagingSenderId": "...",
+    "appId": "..."
 }
-
 firebase = pyrebase.initialize_app(firebase_config)
 auth = firebase.auth()
-firestore = firebase.database()
-storage = firebase.storage()
 
 # ---------------------
-# 세션 상태 초기화
-# ---------------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user_email = ""
-    st.session_state.id_token = ""
-    st.session_state.user_name = ""
-    st.session_state.user_gender = "선택 안함"
-    st.session_state.user_phone = ""
-    st.session_state.profile_image_url = ""
-
-# ---------------------
-# 홈 페이지 클래스
+# Home 페이지
 # ---------------------
 class Home:
-    def __init__(self, login_page, register_page, findpw_page):
+    def __init__(self, *_):
         st.title("🏠 Home")
         if st.session_state.get("logged_in"):
-            st.success(f"{st.session_state.get('user_email')}님 환영합니다.")
+            st.success(f"{st.session_state['user_email']}님, 환영합니다.")
+        st.markdown("""
+---
+**데이터셋 안내**  
+1) **train.csv**: Bike Sharing Demand (시간별 자전거 대여량)  
+2) **population_trends.csv**: 전국·지역별 연도별 인구 추이  
 
-        st.markdown("""
-        ---
-        **Bike Sharing Demand 데이터셋**  
-        - 제공처: [Kaggle Bike Sharing Demand Competition](https://www.kaggle.com/c/bike-sharing-demand)  
-        - 설명: 2011–2012년 캘리포니아 주의 수도인 미국 워싱턴 D.C. 인근 도시에서 시간별 자전거 대여량을 기록한 데이터  
-        - 주요 변수:  
-          - `datetime`, `season`, `holiday`, `workingday`, `weather`  
-          - `temp`, `atemp`, `humidity`, `windspeed`  
-          - `casual`, `registered`, `count`
-        """ )
-        st.markdown("""
-        **Population Trends 데이터셋**  
-        - 설명: 지역별·연도별 인구 변화를 기록한 데이터 (`population_trends.csv`)  
-        - 주요 변수:  
-          - `연도`, `지역`, `인구`, `출생아수(명)`, `사망자수(명)`  
-        """ )
+**사용 방법**:  
+- EDA 탭에서 CSV 파일을 업로드하세요.  
+- train.csv는 기존 Bike Sharing 분석,  
+  population_trends.csv는 인구 분석 전용 탭에서 확인 가능합니다.
+        """)
 
 # ---------------------
-# 로그인 페이지 클래스
+# 인증 관련 페이지
 # ---------------------
 class Login:
     def __init__(self):
-        st.title("🔐 로그인")
+        st.title("🔐 Login")
         email = st.text_input("이메일")
         password = st.text_input("비밀번호", type="password")
         if st.button("로그인"):
             try:
-                user = auth.sign_in_with_email_and_password(email, password)
-                st.session_state.logged_in = True
-                st.session_state.user_email = email
-                st.session_state.id_token = user['idToken']
+                auth.sign_in_with_email_and_password(email, password)
+                st.session_state["logged_in"] = True
+                st.session_state["user_email"] = email
+                st.success("로그인 성공")
+            except:
+                st.error("로그인 실패: 이메일 또는 비밀번호를 확인하세요.")
 
-                user_info = firestore.child("users").child(email.replace(".", "_")).get().val()
-                if user_info:
-                    st.session_state.user_name = user_info.get("name", "")
-                    st.session_state.user_gender = user_info.get("gender", "선택 안함")
-                    st.session_state.user_phone = user_info.get("phone", "")
-                    st.session_state.profile_image_url = user_info.get("profile_image_url", "")
-
-                st.success("로그인 성공!")
-                time.sleep(1)
-                st.rerun()
-            except Exception:
-                st.error("로그인 실패")
-
-# ---------------------
-# 회원가입 페이지 클래스
-# ---------------------
 class Register:
-    def __init__(self, login_page_url):
-        st.title("📝 회원가입")
+    def __init__(self):
+        st.title("📝 Register")
         email = st.text_input("이메일")
         password = st.text_input("비밀번호", type="password")
-        name = st.text_input("성명")
-        gender = st.selectbox("성별", ["선택 안함", "남성", "여성"])
-        phone = st.text_input("휴대전화번호")
-
         if st.button("회원가입"):
             try:
                 auth.create_user_with_email_and_password(email, password)
-                firestore.child("users").child(email.replace(".", "_")).set({
-                    "email": email,
-                    "name": name,
-                    "gender": gender,
-                    "phone": phone,
-                    "role": "user",
-                    "profile_image_url": ""
-                })
-                st.success("회원가입 성공! 로그인 페이지로 이동합니다.")
-                time.sleep(1)
-                st.switch_page(login_page_url)
-            except Exception:
-                st.error("회원가입 실패")
+                st.success("회원가입 성공! 로그인 해주세요.")
+            except:
+                st.error("회원가입 실패: 이미 등록된 이메일이거나 비밀번호 조건을 확인하세요.")
 
-# ---------------------
-# 비밀번호 찾기 페이지 클래스
-# ---------------------
 class FindPassword:
     def __init__(self):
-        st.title("🔎 비밀번호 찾기")
+        st.title("🔍 Find Password")
         email = st.text_input("이메일")
-        if st.button("비밀번호 재설정 메일 전송"):
+        if st.button("비밀번호 재설정 링크 전송"):
             try:
                 auth.send_password_reset_email(email)
                 st.success("비밀번호 재설정 이메일을 전송했습니다.")
-                time.sleep(1)
-                st.rerun()
             except:
-                st.error("이메일 전송 실패")
+                st.error("이메일 전송 실패: 이메일을 확인하세요.")
 
 # ---------------------
-# 사용자 정보 수정 페이지 클래스
-# ---------------------
-class UserInfo:
-    def __init__(self):
-        st.title("👤 사용자 정보")
-
-        email = st.session_state.get("user_email", "")
-        new_email = st.text_input("이메일", value=email)
-        name = st.text_input("성명", value=st.session_state.get("user_name", ""))
-        gender = st.selectbox(
-            "성별",
-            ["선택 안함", "남성", "여성"],
-            index=["선택 안함", "남성", "여성"].index(st.session_state.get("user_gender", "선택 안함"))
-        )
-        phone = st.text_input("휴대전화번호", value=st.session_state.get("user_phone", ""))
-
-        uploaded_file = st.file_uploader("프로필 이미지 업로드", type=["jpg", "jpeg", "png"])
-        if uploaded_file:
-            file_path = f"profiles/{email.replace('.', '_')}.jpg"
-            storage.child(file_path).put(uploaded_file, st.session_state.id_token)
-            image_url = storage.child(file_path).get_url(st.session_state.id_token)
-            st.session_state.profile_image_url = image_url
-            st.image(image_url, width=150)
-        elif st.session_state.get("profile_image_url"):
-            st.image(st.session_state.profile_image_url, width=150)
-
-        if st.button("수정"):
-            st.session_state.user_email = new_email
-            st.session_state.user_name = name
-            st.session_state.user_gender = gender
-            st.session_state.user_phone = phone
-
-            firestore.child("users").child(new_email.replace(".", "_")).update({
-                "email": new_email,
-                "name": name,
-                "gender": gender,
-                "phone": phone,
-                "profile_image_url": st.session_state.get("profile_image_url", "")
-            })
-
-            st.success("사용자 정보가 저장되었습니다.")
-            time.sleep(1)
-            st.rerun()
-
-# ---------------------
-# 로그아웃 페이지 클래스
-# ---------------------
-class Logout:
-    def __init__(self):
-        st.session_state.logged_in = False
-        st.session_state.user_email = ""
-        st.session_state.id_token = ""
-        st.session_state.user_name = ""
-        st.session_state.user_gender = "선택 안함"
-        st.session_state.user_phone = ""
-        st.session_state.profile_image_url = ""
-        st.success("로그아웃 되었습니다.")
-        time.sleep(1)
-        st.rerun()
-
-# ---------------------
-# EDA 페이지 클래스
+# EDA 페이지
 # ---------------------
 class EDA:
     def __init__(self):
-        st.title("📊 Bike Sharing Demand EDA")
-        uploaded = st.file_uploader("데이터셋 업로드 (train.csv)", type="csv")
-        if not uploaded:
-            st.info("train.csv 파일을 업로드 해주세요.")
+        st.title("📊 EDA")
+
+        # 1) Bike Sharing EDA (train.csv)
+        uploaded = st.file_uploader("Upload train.csv", type="csv")
+        if uploaded:
+            df = pd.read_csv(uploaded, parse_dates=['datetime'])
+            tabs = st.tabs([
+                "1. 목적 & 절차", "2. 데이터셋 설명", "3. 데이터 로드 & 품질 체크",
+                "4. Datetime 특성 추출", "5. 시각화", "6. 상관관계 분석",
+                "7. 회귀 예측", "8. 모델 평가"
+            ])
+            with tabs[0]:
+                st.subheader("목적 및 절차")
+                st.write("""
+- 목적: 시간별 자전거 대여 수요 예측  
+- 절차:  
+  1) 데이터 탐색(EDA)  
+  2) 특성 추출  
+  3) 모델 학습  
+  4) 성능 평가
+                """)
+            with tabs[1]:
+                st.subheader("데이터셋 설명")
+                st.markdown(df.head().to_markdown())
+            with tabs[2]:
+                st.subheader("데이터 로드 및 품질 체크")
+                buf = io.StringIO()
+                df.info(buf=buf)
+                st.text(buf.getvalue())
+                st.write(df.isnull().sum())
+            with tabs[3]:
+                st.subheader("Datetime 특성 추출")
+                df['hour']      = df['datetime'].dt.hour
+                df['dayofweek'] = df['datetime'].dt.dayofweek
+                df['month']     = df['datetime'].dt.month
+                st.write(df[['hour','dayofweek','month']].head())
+            with tabs[4]:
+                st.subheader("시각화")
+                fig, ax = plt.subplots()
+                sns.countplot(x='hour', data=df, ax=ax)
+                st.pyplot(fig)
+            with tabs[5]:
+                st.subheader("상관관계 분석")
+                st.write(df.corr())
+            with tabs[6]:
+                st.subheader("회귀 예측")
+                X = df[['hour','dayofweek','month']]
+                y = df['count']
+                model = LinearRegression().fit(X, y)
+                st.write("R²:", model.score(X, y))
+            with tabs[7]:
+                st.subheader("모델 평가")
+                preds = model.predict(X)
+                fig2, ax2 = plt.subplots()
+                ax2.scatter(y, preds, alpha=0.3)
+                st.pyplot(fig2)
+        else:
+            st.info("먼저 train.csv를 업로드하세요.")
+
+        # 2) Population Trends EDA (population_trends.csv)
+        pop_up = st.file_uploader("Upload population_trends.csv", type="csv", key="pop")
+        if not pop_up:
             return
 
-        df = pd.read_csv(uploaded, parse_dates=['datetime'])
+        pop_df = pd.read_csv(pop_up)
 
-        tabs = st.tabs([
-            "1. 목적 & 절차",
-            "2. 데이터셋 설명",
-            "3. 데이터 로드 & 품질 체크",
-            "4. Datetime 특성 추출",
-            "5. 시각화",
-            "6. 상관관계 분석",
-            "7. 이상치 제거",
-            "8. 로그 변환",
-            "9. Population Trends"
+        # 전처리: '세종' 결측치 '-' → 0, 숫자 변환
+        mask = pop_df['지역']=="세종"
+        pop_df.loc[mask, ['인구','출생아수(명)','사망자수(명)']] = \
+            pop_df.loc[mask, ['인구','출생아수(명)','사망자수(명)']].replace('-', 0)
+        pop_df[['인구','출생아수(명)','사망자수(명)']] = \
+            pop_df[['인구','출생아수(명)','사망자수(명)']].astype(int)
+
+        # 지역명 한글→영문 매핑 (전국 제외)
+        mapping = {
+            "서울":"Seoul","부산":"Busan","대구":"Daegu","인천":"Incheon",
+            "광주":"Gwangju","대전":"Daejeon","울산":"Ulsan","세종":"Sejong",
+            "경기":"Gyeonggi","강원":"Gangwon","충북":"Chungbuk","충남":"Chungnam",
+            "전북":"Jeonbuk","전남":"Jeonnam","경북":"Gyeongbuk","경남":"Gyeongnam",
+            "제주":"Jeju"
+        }
+
+        pop_tabs = st.tabs([
+            "기초 통계", "연도별 추이", "지역별 분석", "변화량 분석", "시각화"
         ])
 
-        # 기존 Bike Sharing 분석 탭 코드 생략 (변경 없음)
-        for i, section in enumerate(tabs[:-1]):
-            pass  # 기존 with tabs[0]~tabs[7] 내용 유지
+        # 1) 기초 통계
+        with pop_tabs[0]:
+            st.subheader("Basic Data Overview")
+            buf = io.StringIO()
+            pop_df.info(buf=buf)
+            st.text(buf.getvalue())
+            st.dataframe(pop_df.describe())
 
-        # ---------------------
-        # Population Trends 분석 탭
-        # ---------------------
-        with tabs[-1]:
-            st.header("🚻 Population Trends Analysis")
-            pop_file = st.file_uploader("Population Trends 업로드 (population_trends.csv)", type=["csv"], key="pop")
-            if not pop_file:
-                st.info("population_trends.csv 파일을 업로드해주세요.")
-            else:
-                pop_df = pd.read_csv(pop_file)
-                # 1) 기본 전처리
-                pop_df.replace('-', np.nan, inplace=True)
-                pop_df.loc[pop_df['지역']=='세종', ['인구','출생아수(명)','사망자수(명)']] = pop_df.loc[pop_df['지역']=='세종', ['인구','출생아수(명)','사망자수(명)']].fillna(0)
-                for col in ['인구','출생아수(명)','사망자수(명)']:
-                    pop_df[col] = pd.to_numeric(pop_df[col])
+        # 2) 연도별 추이 & 2035 예측
+        with pop_tabs[1]:
+            st.subheader("Nationwide Population Trend & 2035 Prediction")
+            nation = pop_df[pop_df['지역']=="전국"].copy()
+            fig, ax = plt.subplots()
+            ax.plot(nation['연도'], nation['인구'], marker='o')
+            ax.set_title("Population Trend (Nationwide)")
+            ax.set_xlabel("Year")
+            ax.set_ylabel("Population")
+            recent = nation.tail(3)
+            net = recent['출생아수(명)'] - recent['사망자수(명)']
+            avg_net = net.mean()
+            years = 2035 - recent['연도'].iloc[-1]
+            pred = recent['인구'].iloc[-1] + avg_net * years
+            ax.scatter([2035], [pred], color='red')
+            ax.text(2035, pred, f"{int(pred):,}")
+            st.pyplot(fig)
 
-                # 2) 하위 탭
-                pop_tabs = st.tabs(["Basic Stats","Year Trend","Region Analysis","Change Analysis","Visualization"])
+        # 3) 지역별 분석 (5년 절대/비율 변화)
+        with pop_tabs[2]:
+            st.subheader("5-Year Population Change by Region")
+            latest = pop_df['연도'].max()
+            prev5 = latest - 5
+            df_recent = pop_df[
+                pop_df['연도'].isin([prev5, latest]) & (pop_df['지역']!="전국")
+            ]
+            pivot = df_recent.pivot(index='지역', columns='연도', values='인구')
+            pivot['change'] = pivot[latest] - pivot[prev5]
+            pivot['rate']   = pivot['change'] / pivot[prev5] * 100
+            pivot.index     = pivot.index.map(mapping)
+            pivot = pivot.sort_values('change', ascending=False)
 
-                # Basic Stats
-                with pop_tabs[0]:
-                    st.subheader("Basic Stats")
-                    buf = io.StringIO()
-                    pop_df.info(buf=buf)
-                    st.text(buf.getvalue())
-                    st.dataframe(pop_df.describe())
+            # 절대 변화량 그래프
+            fig3, ax3 = plt.subplots()
+            sns.barplot(x=pivot['change']/1000, y=pivot.index, ax=ax3)
+            ax3.set_title("5-Year Population Change by Region")
+            ax3.set_xlabel("Change (×1,000)")
+            ax3.set_ylabel("")
+            for i, v in enumerate(pivot['change']/1000):
+                ax3.text(v + 0.1, i, f"{v:.1f}")
+            st.pyplot(fig3)
 
-                # Year Trend
-                with pop_tabs[1]:
-                    st.subheader("Year Trend")
-                    df_nation = pop_df[pop_df['지역']=='전국'].sort_values('연도')
-                    fig, ax = plt.subplots()
-                    sns.lineplot(x='연도', y='인구', data=df_nation, ax=ax)
-                    ax.set_title("Population Trend Over Years")
-                    ax.set_xlabel("Year")
-                    ax.set_ylabel("Population")
-                    # 2035년 예측
-                    recent = df_nation.tail(3)
-                    net_avg = (recent['출생아수(명)'] - recent['사망자수(명)']).mean()
-                    last_year = df_nation['연도'].iloc[-1]
-                    last_pop = df_nation['인구'].iloc[-1]
-                    years = 2035 - last_year
-                    pred = last_pop + net_avg * years
-                    ax.scatter(2035, pred)
-                    ax.text(2035, pred, f"{int(pred):,}", ha='left')
-                    st.pyplot(fig)
+            # 비율 변화 그래프
+            fig4, ax4 = plt.subplots()
+            sns.barplot(x=pivot['rate'], y=pivot.index, ax=ax4)
+            ax4.set_title("5-Year Population Change Rate by Region")
+            ax4.set_xlabel("Percent Change (%)")
+            ax4.set_ylabel("")
+            for i, v in enumerate(pivot['rate']):
+                ax4.text(v + 0.1, i, f"{v:.1f}%")
+            st.pyplot(fig4)
 
-                # Region Analysis
-                with pop_tabs[2]:
-                    st.subheader("Region Analysis")
-                    latest = pop_df['연도'].max()
-                    prev = latest - 5
-                    df_l = pop_df[pop_df['연도']==latest]
-                    df_p = pop_df[pop_df['연도']==prev]
-                    df_ch = df_l[['지역','인구']].merge(df_p[['지역','인구']], on='지역', suffixes=('','_prev'))
-                    df_ch['change'] = df_ch['인구'] - df_ch['인구_prev']
-                    df_ch = df_ch[df_ch['지역']!='전국'].sort_values('change', ascending=False)
-                    fig2, ax2 = plt.subplots()
-                    sns.barplot(y='지역', x='change', data=df_ch, ax=ax2)
-                    ax2.set_xlabel("Population Change (Thousands)")
-                    ax2.set_ylabel("Region")
-                    for i, v in enumerate(df_ch['change']):
-                        ax2.text(v, i, f"{v/1000:.1f}", va='center')
-                    st.pyplot(fig2)
-                    df_ch['rate'] = df_ch['change'] / df_ch['인구_prev'] * 100
-                    fig3, ax3 = plt.subplots()
-                    sns.barplot(y='지역', x='rate', data=df_ch, ax=ax3)
-                    ax3.set_xlabel("Change Rate (%)")
-                    ax3.set_ylabel("Region")
-                    st.pyplot(fig3)
+            st.markdown("""
+**Explanation**:  
+- The first chart shows the 5-year absolute population change (in thousands) for each region.  
+- The second chart shows the percentage change relative to the population 5 years ago.
+            """)
 
-                # Change Analysis (Top 100 diffs)
-                with pop_tabs[3]:
-                    st.subheader("Top 100 Yearly Changes")
-                    pop_df['diff'] = pop_df.groupby('지역')['인구'].diff()
-                    df_diff = pop_df[pop_df['지역']!='전국'][['지역','연도','diff']].nlargest(100, 'diff')
-                    styled = df_diff.style.background_gradient(subset=['diff'], cmap='bwr').format({'diff':'{:,}'})
-                    st.dataframe(styled)
+        # 4) 변화량 분석 (Top 100 Change Cases)
+        with pop_tabs[3]:
+            st.subheader("Top 100 Population Change Cases")
+            pop_df['diff'] = pop_df.groupby('지역')['인구'].diff()
+            top100 = pop_df[pop_df['지역']!="전국"].nlargest(100, 'diff')
+            styled = (
+                top100[['연도','지역','인구','diff']]
+                .rename(columns={'diff':'Change'})
+                .style
+                .format({'인구':'{:,.0f}','Change':'{:,.0f}'})
+                .background_gradient(subset=['Change'], cmap='RdBu_r', axis=0)
+            )
+            st.dataframe(styled)
 
-                # Visualization
-                with pop_tabs[4]:
-                    st.subheader("Visualization")
-                    pivot = pop_df.pivot(index='지역', columns='연도', values='인구')
-                    fig4, ax4 = plt.subplots()
-                    pivot.plot(kind='area', ax=ax4)
-                    ax4.set_xlabel("Region")
-                    ax4.set_ylabel("Population")
-                    st.pyplot(fig4)
-
-# ---------------------
-# 페이지 객체 생성
-# ---------------------
-Page_Login    = st.Page(Login,    title="Login",    icon="🔐", url_path="login")
-Page_Register = st.Page(lambda: Register(Page_Login.url_path), title="Register", icon="📝", url_path="register")
-Page_FindPW   = st.Page(FindPassword, title="Find PW", icon="🔎", url_path="find-password")
-Page_Home     = st.Page(lambda: Home(Page_Login, Page_Register, Page_FindPW), title="Home", icon="🏠", url_path="home", default=True)
-Page_User     = st.Page(UserInfo, title="My Info", icon="👤", url_path="user-info")
-Page_Logout   = st.Page(Logout,   title="Logout",  icon="🔓", url_path="logout")
-Page_EDA      = st.Page(EDA,      title="EDA",     icon="📊", url_path="eda")
+        # 5) 시각화 (지역-연도 누적 영역 그래프)
+        with pop_tabs[4]:
+            st.subheader("Region-Year Stacked Area Chart")
+            pivot2 = pop_df.pivot(index='연도', columns='지역', values='인구')
+            pivot2 = pivot2.drop('전국', axis=1).rename(columns=mapping)
+            fig5, ax5 = plt.subplots()
+            pivot2.plot.area(ax=ax5)
+            ax5.set_title("Population by Region (Area Chart)")
+            ax5.set_xlabel("Year")
+            ax5.set_ylabel("Population")
+            st.pyplot(fig5)
 
 # ---------------------
-# 네비게이션 실행
+# 앱 실행
 # ---------------------
-if st.session_state.logged_in:
-    pages = [Page_Home, Page_User, Page_Logout, Page_EDA]
-else:
-    pages = [Page_Home, Page_Login, Page_Register, Page_FindPW]
+def main():
+    st.set_page_config(page_title="EDA App", layout="wide")
+    menu = ["Home", "Login", "Register", "FindPw", "EDA"]
+    choice = st.sidebar.selectbox("메뉴", menu)
+    if choice == "Home":
+        Home()
+    elif choice == "Login":
+        Login()
+    elif choice == "Register":
+        Register()
+    elif choice == "FindPw":
+        FindPassword()
+    elif choice == "EDA":
+        EDA()
 
-selected_page = st.navigation(pages)
-selected_page.run()
+if __name__ == "__main__":
+    main()
