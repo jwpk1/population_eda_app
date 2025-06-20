@@ -340,7 +340,7 @@ class EDA:
         # 5. 지역·연도별 누적 영역 그래프
         with tabs[4]:
             st.header("Population by Region & Year (Stacked Area)")
-            area_pivot = df.pivot(index='연도', columns='지역', values='인구').drop(columns='전국')
+            area_pivot = df.pivot(index='연도', columns='지역', values='인구').drop(columns='Nation')
             area_pivot = area_pivot.rename(columns=region_map)
 
             fig, ax = plt.subplots()
