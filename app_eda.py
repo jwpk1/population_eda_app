@@ -20,10 +20,10 @@ firebase_config = {
     "appId": "1:812186368395:web:be2f7291ce54396209d78e"
 }
 
-firebase   = pyrebase.initialize_app(firebase_config)
-auth       = firebase.auth()
-firestore  = firebase.database()
-storage    = firebase.storage()
+firebase  = pyrebase.initialize_app(firebase_config)
+auth      = firebase.auth()
+firestore = firebase.database()
+storage   = firebase.storage()
 
 # ---------------------
 # 세션 상태 초기화
@@ -85,7 +85,7 @@ class Login:
                 st.success("로그인 성공!")
                 time.sleep(1)
                 st.rerun()
-            except Exception:
+            except:
                 st.error("로그인 실패")
 
 # ---------------------
@@ -114,7 +114,7 @@ class Register:
                 st.success("회원가입 성공! 로그인 페이지로 이동합니다.")
                 time.sleep(1)
                 st.switch_page(login_page_url)
-            except Exception:
+            except:
                 st.error("회원가입 실패")
 
 # ---------------------
@@ -184,7 +184,7 @@ class UserInfo:
 class Logout:
     def __init__(self):
         for key in ["logged_in","user_email","id_token","user_name","user_gender","user_phone","profile_image_url"]:
-            st.session_state[key] = False if key=="logged_in" else ""
+            st.session_state[key] = False if key == "logged_in" else ""
         st.success("로그아웃 되었습니다.")
         time.sleep(1)
         st.rerun()
@@ -201,18 +201,13 @@ class EDA:
             return
 
         df = pd.read_csv(uploaded)
-        # 세종 결측치 처리 및 숫자 변환
         mask = df['지역'] == '세종'
         df.loc[mask] = df.loc[mask].replace('-', '0')
         for col in ['인구', '출생아수(명)', '사망자수(명)']:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
         tabs = st.tabs([
-            "기초 통계",
-            "연도별 추이",
-            "지역별 분석",
-            "변화량 분석",
-            "시각화"
+            "기초 통계", "연도별 추이", "지역별 분석", "변화량 분석", "시각화"
         ])
 
         # 1. Basic Summary
@@ -246,7 +241,7 @@ class EDA:
             ax.legend()
             st.pyplot(fig)
 
-        # 3. Regional Change Rankings (Last 5 Years)
+        # 3. Regional Change Rankings
         with tabs[2]:
             st.header("Regional Population Change Rankings (Last 5 Years)")
             last = df['연도'].max()
@@ -256,14 +251,14 @@ class EDA:
             pivot['change'] = pivot[last] - pivot[prev]
             rank = pivot['change'].reset_index().sort_values('change', ascending=False)
 
-            mapping = {
+            region_map = {
                 '서울':'Seoul','부산':'Busan','대구':'Daegu','인천':'Incheon',
                 '광주':'Gwangju','대전':'Daejeon','울산':'Ulsan','세종':'Sejong',
                 '경기':'Gyeonggi-do','강원':'Gangwon-do','충북':'Chungbuk-do',
                 '충남':'Chungnam-do','전북':'Jeonbuk-do','전남':'Jeonnam-do',
                 '경북':'Gyeongbuk-do','경남':'Gyeongnam-do','제주':'Jeju-do'
             }
-            rank['region_en'] = rank['지역'].map(mapping)
+            rank['region_en'] = rank['지역'].map(region_map)
 
             fig, ax = plt.subplots()
             sns.barplot(x=rank['change']/1000, y=rank['region_en'], ax=ax)
@@ -282,10 +277,6 @@ class EDA:
             ax2.set_xlabel("Change Rate (%)")
             st.pyplot(fig2)
 
-            st.markdown(
-                "This shows the amount and rate of population change over the last 5 years for each region (excluding Nationwide)."
-            )
-
         # 4. Top Year-over-Year Differences
         with tabs[3]:
             st.header("Top 100 Year-over-Year Population Differences")
@@ -299,8 +290,7 @@ class EDA:
                 top100
                 .style
                 .format({'diff':'{:,}'})
-                .applymap(lambda v: 'background-color: #add8e6' if v>0 else 'background-color: #f08080',
-                          subset=['diff'])
+                .background_gradient(cmap='RdBu', subset=['diff'], axis=0)
             )
             st.write(styled)
 
@@ -308,6 +298,8 @@ class EDA:
         with tabs[4]:
             st.header("Population by Region & Year (Stacked Area)")
             area_pivot = df.pivot(index='연도', columns='지역', values='인구').drop(columns='전국')
+            area_pivot = area_pivot.rename(columns=region_map)
+
             fig, ax = plt.subplots()
             area_pivot.plot.area(ax=ax)
             ax.set_title("Population by Region and Year")
@@ -318,11 +310,10 @@ class EDA:
 # ---------------------
 # 페이지 객체 생성
 # ---------------------
-Page_Login    = st.Page(Login,    title="Login",    icon="🔐", url_path="login")
+Page_Login    = st.Page(Login, title="Login", icon="🔐", url_path="login")
 Page_Register = st.Page(lambda: Register(Page_Login.url_path), title="Register", icon="📝", url_path="register")
 Page_FindPW   = st.Page(FindPassword, title="Find PW", icon="🔎", url_path="find-password")
-Page_Home     = st.Page(lambda: Home(Page_Login, Page_Register, Page_FindPW),
-                        title="Home", icon="🏠", url_path="home", default=True)
+Page_Home     = st.Page(lambda: Home(Page_Login, Page_Register, Page_FindPW), title="Home", icon="🏠", url_path="home", default=True)
 Page_User     = st.Page(UserInfo, title="My Info", icon="👤", url_path="user-info")
 Page_Logout   = st.Page(Logout,   title="Logout",  icon="🔓", url_path="logout")
 Page_EDA      = st.Page(EDA,      title="EDA",     icon="📊", url_path="eda")
