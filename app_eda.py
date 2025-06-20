@@ -1,57 +1,68 @@
 import streamlit as st
 import pyrebase
+import time
 import io
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.linear_model import LinearRegression
 
 # ---------------------
-# Streamlit & Seaborn Settings
-# ---------------------
-st.set_option('deprecation.showPyplotGlobalUse', False)
-sns.set_style("whitegrid")
-
-# ---------------------
-# Firebase 설정 (기존 값 그대로 유지)
+# Firebase 설정
 # ---------------------
 firebase_config = {
     "apiKey": "AIzaSyCswFmrOGU3FyLYxwbNPTp7hvQxLfTPIZw",
     "authDomain": "sw-projects-49798.firebaseapp.com",
     "databaseURL": "https://sw-projects-49798-default-rtdb.firebaseio.com",
     "projectId": "sw-projects-49798",
-    "storageBucket": "sw-projects-49798.appspot.com",
-    "messagingSenderId": "...",
-    "appId": "..."
+    "storageBucket": "sw-projects-49798.firebasestorage.app",
+    "messagingSenderId": "812186368395",
+    "appId": "1:812186368395:web:be2f7291ce54396209d78e"
 }
 
-firebase = pyrebase.initialize_app(firebase_config)
-auth = firebase.auth()
-storage = firebase.storage()
+firebase   = pyrebase.initialize_app(firebase_config)
+auth       = firebase.auth()
+firestore  = firebase.database()
+storage    = firebase.storage()
 
 # ---------------------
 # 세션 상태 초기화
 # ---------------------
 if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user_email = ""
-    st.session_state.id_token = ""
-    st.session_state.user_name = ""
-    st.session_state.user_gender = "선택 안함"
-    st.session_state.user_phone = ""
+    st.session_state.logged_in         = False
+    st.session_state.user_email        = ""
+    st.session_state.id_token          = ""
+    st.session_state.user_name         = ""
+    st.session_state.user_gender       = "선택 안함"
+    st.session_state.user_phone        = ""
     st.session_state.profile_image_url = ""
 
 # ---------------------
-# 한글 → 영어 지역명 매핑
+# 홈 페이지 클래스
 # ---------------------
-REGION_MAP = {
-    "서울": "Seoul", "부산": "Busan", "대구": "Daegu", "인천": "Incheon", "광주": "Gwangju",
-    "대전": "Daejeon", "울산": "Ulsan", "세종": "Sejong", "경기": "Gyeonggi",
-    "강원": "Gangwon", "충북": "Chungbuk", "충남": "Chungnam", "전북": "Jeonbuk",
-    "전남": "Jeonnam", "경북": "Gyeongbuk", "경남": "Gyeongnam", "제주": "Jeju"
-}
+class Home:
+    def __init__(self, login_page, register_page, findpw_page):
+        st.title("🏠 Home")
+        if st.session_state.get("logged_in"):
+            st.success(f"{st.session_state.get('user_email')}님 환영합니다.")
 
+        st.markdown("""
+        ---
+        **Population Trends Dataset**  
+        - File: `population_trends.csv`  
+        - Columns:  
+          - `연도`: Year  
+          - `지역`: Region  
+          - `인구`: Population  
+          - `출생아수(명)`: Number of births  
+          - `사망자수(명)`: Number of deaths  
+
+        Navigate to the **Population Trends EDA** page to begin your analysis.
+        """)
+
+# ---------------------
+# 로그인 페이지 클래스
+# ---------------------
 class Login:
     def __init__(self):
         st.title("🔐 로그인")
@@ -62,14 +73,14 @@ class Login:
                 user = auth.sign_in_with_email_and_password(email, password)
                 st.session_state.logged_in = True
                 st.session_state.user_email = email
-                st.session_state.id_token = user['idToken']
+                st.session_state.id_token   = user['idToken']
 
-                user_info = firestore.child("users").child(email.replace(".", "_")).get().
+                user_info = firestore.child("users").child(email.replace(".", "_")).get().val()
                 if user_info:
-                    st.session_state.user_name = user_info.get("name", "")
-                    st.session_state.user_gender = user_info.get("gender", "선택 안함")
-                    st.session_state.user_phone = user_info.get("phone", "")
-                    st.session_state.profile_image_url = user_info.get("profile_image_url"
+                    st.session_state.user_name         = user_info.get("name", "")
+                    st.session_state.user_gender       = user_info.get("gender", "선택 안함")
+                    st.session_state.user_phone        = user_info.get("phone", "")
+                    st.session_state.profile_image_url = user_info.get("profile_image_url", "")
 
                 st.success("로그인 성공!")
                 time.sleep(1)
@@ -83,21 +94,21 @@ class Login:
 class Register:
     def __init__(self, login_page_url):
         st.title("📝 회원가입")
-        email = st.text_input("이메일")
+        email    = st.text_input("이메일")
         password = st.text_input("비밀번호", type="password")
-        name = st.text_input("성명")
-        gender = st.selectbox("성별", ["선택 안함", "남성", "여성"])
-        phone = st.text_input("휴대전화번호")
+        name     = st.text_input("성명")
+        gender   = st.selectbox("성별", ["선택 안함", "남성", "여성"])
+        phone    = st.text_input("휴대전화번호")
 
         if st.button("회원가입"):
             try:
                 auth.create_user_with_email_and_password(email, password)
                 firestore.child("users").child(email.replace(".", "_")).set({
                     "email": email,
-                    "name": name,
+                    "name":  name,
                     "gender": gender,
-                    "phone": phone,
-                    "role": "user",
+                    "phone":  phone,
+                    "role":   "user",
                     "profile_image_url": ""
                 })
                 st.success("회원가입 성공! 로그인 페이지로 이동합니다.")
@@ -129,17 +140,17 @@ class UserInfo:
     def __init__(self):
         st.title("👤 사용자 정보")
 
-        email = st.session_state.get("user_email", "")
-        new_email = st.text_input("이메일", value=email)
-        name = st.text_input("성명", value=st.session_state.get("user_name", ""))
-        gender = st.selectbox(
+        email      = st.session_state.get("user_email", "")
+        new_email  = st.text_input("이메일", value=email)
+        name       = st.text_input("성명", value=st.session_state.get("user_name", ""))
+        gender     = st.selectbox(
             "성별",
             ["선택 안함", "남성", "여성"],
-            index=["선택 안함", "남성", "여성"].index(st.session_state.get("user_gender", 
+            index=["선택 안함", "남성", "여성"].index(st.session_state.get("user_gender", "선택 안함"))
         )
-        phone = st.text_input("휴대전화번호", value=st.session_state.get("user_phone", "")
+        phone      = st.text_input("휴대전화번호", value=st.session_state.get("user_phone", ""))
 
-        uploaded_file = st.file_uploader("프로필 이미지 업로드", type=["jpg", "jpeg", "png
+        uploaded_file = st.file_uploader("프로필 이미지 업로드", type=["jpg", "jpeg", "png"])
         if uploaded_file:
             file_path = f"profiles/{email.replace('.', '_')}.jpg"
             storage.child(file_path).put(uploaded_file, st.session_state.id_token)
@@ -150,16 +161,16 @@ class UserInfo:
             st.image(st.session_state.profile_image_url, width=150)
 
         if st.button("수정"):
-            st.session_state.user_email = new_email
-            st.session_state.user_name = name
+            st.session_state.user_email  = new_email
+            st.session_state.user_name   = name
             st.session_state.user_gender = gender
-            st.session_state.user_phone = phone
+            st.session_state.user_phone  = phone
 
             firestore.child("users").child(new_email.replace(".", "_")).update({
                 "email": new_email,
-                "name": name,
+                "name":  name,
                 "gender": gender,
-                "phone": phone,
+                "phone":  phone,
                 "profile_image_url": st.session_state.get("profile_image_url", "")
             })
 
@@ -172,222 +183,137 @@ class UserInfo:
 # ---------------------
 class Logout:
     def __init__(self):
-        st.session_state.logged_in = False
-        st.session_state.user_email = ""
-        st.session_state.id_token = ""
-        st.session_state.user_name = ""
-        st.session_state.user_gender = "선택 안함"
-        st.session_state.user_phone = ""
-        st.session_state.profile_image_url = ""
+        for key in ["logged_in","user_email","id_token","user_name","user_gender","user_phone","profile_image_url"]:
+            st.session_state[key] = False if key=="logged_in" else ""
         st.success("로그아웃 되었습니다.")
         time.sleep(1)
         st.rerun()
-# ---------------------
-# Home Page (simple description)
-# ---------------------
-class Home:
-    def __init__(self):
-        st.title("🏠 Home – Population Trends App")
-        st.markdown(
-            """
-            This application provides **exploratory data analysis** for the South‑Korean _population_trends.csv_ dataset.  
-            Go to the **EDA** page in the sidebar, upload the CSV file, and explore statistics and visualisations.
-            """
-        )
-        st.info("Firebase login & storage modules remain unchanged; analysis logic resides in the EDA class.")
 
 # ---------------------
-# EDA Page
+# EDA 페이지 클래스
 # ---------------------
 class EDA:
     def __init__(self):
-        st.title("📊 Exploratory Data Analysis – Population")
+        st.title("📊 Population Trends EDA")
+        uploaded = st.file_uploader("Upload population_trends.csv", type="csv")
+        if not uploaded:
+            st.info("Please upload the population_trends.csv file.")
+            return
 
-        # 1) CSV upload
-        uploaded_pop = st.file_uploader("📂 Upload population_trends.csv", type=["csv"])
+        df = pd.read_csv(uploaded)
+        # 세종 결측치 처리 및 숫자 변환
+        mask = df['지역'] == '세종'
+        df.loc[mask] = df.loc[mask].replace('-', '0')
+        for col in ['인구', '출생아수(명)', '사망자수(명)']:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-        if uploaded_pop:
-            # 2) Load dataframe
-            pop_df = pd.read_csv(uploaded_pop)
+        tabs = st.tabs([
+            "기초 통계",
+            "연도별 추이",
+            "지역별 분석",
+            "변화량 분석",
+            "시각화"
+        ])
 
-            # 3) Pre‑processing ------------------------------------------------
-            # (i) Replace '-' with 0 for Sejong rows
-            sejong_mask = pop_df["지역"] == "세종"
-            pop_df.loc[sejong_mask] = pop_df.loc[sejong_mask].replace("-", 0)
+        # 1. Basic Summary
+        with tabs[0]:
+            st.header("Basic Summary Statistics")
+            buf = io.StringIO()
+            df.info(buf=buf)
+            st.subheader("DataFrame Info")
+            st.text(buf.getvalue())
+            st.subheader("Descriptive Statistics")
+            st.dataframe(df.describe())
 
-            # (ii) Convert numerical columns to int
-            num_cols = ["인구", "출생아수(명)", "사망자수(명)"]
-            for col in num_cols:
-                pop_df[col] = pd.to_numeric(pop_df[col], errors="coerce").fillna(0).astype(int)
+        # 2. Yearly Trend & Projection
+        with tabs[1]:
+            st.header("Yearly Population Trend & Projection")
+            df_nat = df[df['지역'] == '전국'].sort_values('연도')
+            years, pops = df_nat['연도'], df_nat['인구']
+            last_year = years.max()
+            recent = df_nat[df_nat['연도'] > last_year - 3]
+            avg_net = (recent['출생아수(명)'] - recent['사망자수(명)']).mean()
+            last_pop = pops.iloc[-1]
+            future_years = list(range(last_year + 1, 2036))
+            proj = [int(last_pop + avg_net * (y - last_year)) for y in future_years]
 
-            # 4) Tab layout ----------------------------------------------------
-            tabs = st.tabs([
-                "기초 통계",     # 0 Basic Stats
-                "연도별 추이",   # 1 National Trend
-                "지역별 분석",   # 2 Regional Analysis (heatmap)
-                "변화량 분석",   # 3 5‑year Change
-                "시각화"        # 4 Stacked Area Chart
-            ])
+            fig, ax = plt.subplots()
+            ax.plot(years, pops, marker='o', label='Historical')
+            ax.plot(future_years, proj, marker='o', linestyle='--', label='Projected')
+            ax.set_title("Population Trend")
+            ax.set_xlabel("Year")
+            ax.set_ylabel("Population")
+            ax.legend()
+            st.pyplot(fig)
 
-            # -----------------------------------------------------------------
-            # TAB 0 – 기초 통계
-            # -----------------------------------------------------------------
-            with tabs[0]:
-                st.subheader("📈 Basic Descriptive Statistics")
-                buffer = io.StringIO()
-                pop_df.info(buf=buffer)
-                st.text("DataFrame info()")
-                st.text(buffer.getvalue())
+        # 3. Regional Change Rankings (Last 5 Years)
+        with tabs[2]:
+            st.header("Regional Population Change Rankings (Last 5 Years)")
+            last = df['연도'].max()
+            prev = last - 5
+            df_sel = df[df['연도'].isin([prev, last])]
+            pivot = df_sel.pivot(index='지역', columns='연도', values='인구').drop(index='전국')
+            pivot['change'] = pivot[last] - pivot[prev]
+            rank = pivot['change'].reset_index().sort_values('change', ascending=False)
 
-                st.write("## Describe")
-                st.dataframe(pop_df.describe(include="all"))
+            mapping = {
+                '서울':'Seoul','부산':'Busan','대구':'Daegu','인천':'Incheon',
+                '광주':'Gwangju','대전':'Daejeon','울산':'Ulsan','세종':'Sejong',
+                '경기':'Gyeonggi-do','강원':'Gangwon-do','충북':'Chungbuk-do',
+                '충남':'Chungnam-do','전북':'Jeonbuk-do','전남':'Jeonnam-do',
+                '경북':'Gyeongbuk-do','경남':'Gyeongnam-do','제주':'Jeju-do'
+            }
+            rank['region_en'] = rank['지역'].map(mapping)
 
-            # -----------------------------------------------------------------
-            # TAB 1 – 연도별 전체 인구 추이 (전국)
-            # -----------------------------------------------------------------
-            with tabs[1]:
-                st.subheader("📈 National Population Trend – All Years")
+            fig, ax = plt.subplots()
+            sns.barplot(x=rank['change']/1000, y=rank['region_en'], ax=ax)
+            for i, v in enumerate(rank['change']/1000):
+                ax.text(v, i, f"{v:.1f}", va='center')
+            ax.set_title("Population Change by Region (Last 5 Years)")
+            ax.set_xlabel("Change (Thousands)")
+            st.pyplot(fig)
 
-                nat_df = pop_df[pop_df["지역"] == "전국"].copy().sort_values("연도")
+            rank['pct_change'] = (rank['change'] / pivot[prev]) * 100
+            fig2, ax2 = plt.subplots()
+            sns.barplot(x=rank['pct_change'], y=rank['region_en'], ax=ax2)
+            for i, v in enumerate(rank['pct_change']):
+                ax2.text(v, i, f"{v:.1f}%", va='center')
+            ax2.set_title("Population Change Rate by Region (Last 5 Years)")
+            ax2.set_xlabel("Change Rate (%)")
+            st.pyplot(fig2)
 
-                fig_nat, ax_nat = plt.subplots(figsize=(8, 5))
-                ax_nat.plot(nat_df["연도"], nat_df["인구"], marker="o")
-                ax_nat.set_title("National Population by Year")
-                ax_nat.set_xlabel("Year")
-                ax_nat.set_ylabel("Population")
+            st.markdown(
+                "This shows the amount and rate of population change over the last 5 years for each region (excluding Nationwide)."
+            )
 
-                # Predict 2035 population
-                recent = nat_df.tail(3)
-                mean_delta = (recent["출생아수(명)"] - recent["사망자수(명)"]).mean()
-                pred_2035 = nat_df.iloc[-1]["인구"] + mean_delta * (2035 - nat_df.iloc[-1]["연도"])
+        # 4. Top Year-over-Year Differences
+        with tabs[3]:
+            st.header("Top 100 Year-over-Year Population Differences")
+            df_diff = df.sort_values(['지역','연도'])
+            df_diff['diff'] = df_diff.groupby('지역')['인구'].diff()
+            df_diff = df_diff[df_diff['지역'] != '전국']
+            top100 = df_diff.nlargest(100, 'diff')[['지역','연도','diff']]
+            top100['diff'] = top100['diff'].astype(int)
 
-                ax_nat.scatter(2035, pred_2035, color="red")
-                ax_nat.annotate(f"2035 Est.: {pred_2035:,.0f}", (2035, pred_2035),
-                                textcoords="offset points", xytext=(0, 10), ha='center')
+            styled = (
+                top100
+                .style
+                .format({'diff':'{:,}'})
+                .applymap(lambda v: 'background-color: #add8e6' if v>0 else 'background-color: #f08080',
+                          subset=['diff'])
+            )
+            st.write(styled)
 
-                st.pyplot(fig_nat)
-                st.metric(label="2035 Est. Population", value=f"{pred_2035:,.0f}")
-
-            # -----------------------------------------------------------------
-            # TAB 2 – 지역별 분석 (Heatmap)
-            # -----------------------------------------------------------------
-            with tabs[2]:
-                st.subheader("🏙️ Regional Analysis – Heatmap")
-
-                # Pivot table (region × year) excluding national total
-                regional = pop_df[pop_df["지역"] != "전국"].copy()
-                pivot_ht = regional.pivot(index="지역", columns="연도", values="인구")
-                pivot_ht = pivot_ht.sort_index()
-
-                # Translate index to English
-                pivot_ht.index = pivot_ht.index.map(lambda x: REGION_MAP.get(x, x))
-
-                # Convert to thousand persons for readability
-                pivot_ht_k = pivot_ht / 1000.0
-
-                fig_ht, ax_ht = plt.subplots(figsize=(10, 8))
-                sns.heatmap(pivot_ht_k, cmap="YlGnBu", ax=ax_ht, linewidths=0.3, linecolor="gray")
-                ax_ht.set_title("Population (thousand) by Region & Year")
-                ax_ht.set_xlabel("Year")
-                ax_ht.set_ylabel("Region")
-
-                st.pyplot(fig_ht)
-                st.write("The heatmap highlights absolute population levels across regions and years, enabling quick identification of growth hotspots and declining areas.")
-
-            # -----------------------------------------------------------------
-            # TAB 3 – 변화량 분석 (최근 5년)
-            # -----------------------------------------------------------------
-            with tabs[3]:
-                st.subheader("🔄 Regional Population Change – Last 5 Years")
-
-                latest_year = pop_df["연도"].max()
-                window_years = list(range(latest_year - 4, latest_year + 1))
-
-                win_df = pop_df[(pop_df["연도"].isin(window_years)) & (pop_df["지역"] != "전국")]
-                pivot_win = win_df.pivot(index="지역", columns="연도", values="인구").dropna()
-
-                abs_change = pivot_win[latest_year] - pivot_win[latest_year - 4]
-                pct_change = abs_change / pivot_win[latest_year - 4] * 100
-
-                change_df = pd.DataFrame({
-                    "region_ko": abs_change.index,
-                    "abs": abs_change.values,
-                    "pct": pct_change.values
-                })
-                change_df["region"] = change_df["region_ko"].map(lambda x: REGION_MAP.get(x, x))
-                change_df["abs_k"] = change_df["abs"] / 1000.0  # thousand
-
-                # Absolute change bar plot
-                ch_sorted = change_df.sort_values("abs", ascending=False)
-                fig_abs, ax_abs = plt.subplots(figsize=(10, 7))
-                sns.barplot(data=ch_sorted, x="abs_k", y="region", ax=ax_abs, palette="Blues_r", orient="h")
-                ax_abs.set_title("Absolute Change (thousand)")
-                ax_abs.set_xlabel("Change (thousand persons)")
-                ax_abs.set_ylabel("Region")
-
-                for i, p in enumerate(ax_abs.patches):
-                    val = ch_sorted.iloc[i]["abs_k"]
-                    ax_abs.text(p.get_width() + 1, p.get_y() + p.get_height()/2, f"{val:,.1f}", va="center")
-
-                st.pyplot(fig_abs)
-
-                # Percentage change bar plot
-                pct_sorted = change_df.sort_values("pct", ascending=False)
-                fig_pct, ax_pct = plt.subplots(figsize=(10, 7))
-                sns.barplot(data=pct_sorted, x="pct", y="region", ax=ax_pct, palette="Greens_r", orient="h")
-                ax_pct.set_title("Percentage Change (%)")
-                ax_pct.set_xlabel("Change (%)")
-                ax_pct.set_ylabel("Region")
-
-                for i, p in enumerate(ax_pct.patches):
-                    pc_val = pct_sorted.iloc[i]["pct"]
-                    ax_pct.text(p.get_width() + 0.1, p.get_y() + p.get_height()/2, f"{pc_val:,.1f}%", va="center")
-
-                st.pyplot(fig_pct)
-                st.write("These charts reveal regions with the highest absolute and relative population shifts over the past five years.")
-
-            # -----------------------------------------------------------------
-            # TAB 4 – 시각화 (Stacked Area Chart)
-            # -----------------------------------------------------------------
-            with tabs[4]:
-                st.subheader("📊 Stacked Area Chart – Regional Composition")
-
-                vis_df = pop_df[pop_df["지역"] != "전국"].copy()
-                pivot_area = vis_df.pivot(index="연도", columns="지역", values="인구").sort_index()
-                pivot_area = pivot_area.fillna(0)
-
-                # Translate columns to English and divide by thousand
-                pivot_area.columns = [REGION_MAP.get(c, c) for c in pivot_area.columns]
-                pivot_area_k = pivot_area / 1000.0
-
-                fig_area, ax_area = plt.subplots(figsize=(10, 6))
-                ax_area.stackplot(pivot_area_k.index, pivot_area_k.T, labels=pivot_area_k.columns,
-                                  colors=sns.color_palette("tab20", n_colors=len(pivot_area_k.columns)))
-                ax_area.set_title("Regional Population Composition (thousand)")
-                ax_area.set_xlabel("Year")
-                ax_area.set_ylabel("Population (thousand)")
-                ax_area.legend(loc="upper left", bbox_to_anchor=(1, 1))
-
-                st.pyplot(fig_area)
-                st.write("The stacked area chart visualises how each region contributes to the overall population over time, emphasising proportional shifts as well as absolute growth.")
-
-# ---------------------
-# Main
-# ---------------------
-PAGES = {
-    "Home": Home,
-    "EDA": EDA
-}
-
-def main():
-    st.sidebar.title("Navigation")
-    selection = st.sidebar.radio("Go to", list(PAGES.keys()))
-    page = PAGES[selection]
-    page()
-
-if __name__ == "__main__":
-    main()
-
+        # 5. Pivot & Stacked Area Visualization
+        with tabs[4]:
+            st.header("Population by Region & Year (Stacked Area)")
+            area_pivot = df.pivot(index='연도', columns='지역', values='인구').drop(columns='전국')
+            fig, ax = plt.subplots()
+            area_pivot.plot.area(ax=ax)
+            ax.set_title("Population by Region and Year")
+            ax.set_xlabel("Year")
+            ax.set_ylabel("Population")
+            st.pyplot(fig)
 
 # ---------------------
 # 페이지 객체 생성
@@ -395,7 +321,8 @@ if __name__ == "__main__":
 Page_Login    = st.Page(Login,    title="Login",    icon="🔐", url_path="login")
 Page_Register = st.Page(lambda: Register(Page_Login.url_path), title="Register", icon="📝", url_path="register")
 Page_FindPW   = st.Page(FindPassword, title="Find PW", icon="🔎", url_path="find-password")
-Page_Home     = st.Page(lambda: Home(Page_Login, Page_Register, Page_FindPW), title="Home", icon="🏠", url_path="home", default=True)
+Page_Home     = st.Page(lambda: Home(Page_Login, Page_Register, Page_FindPW),
+                        title="Home", icon="🏠", url_path="home", default=True)
 Page_User     = st.Page(UserInfo, title="My Info", icon="👤", url_path="user-info")
 Page_Logout   = st.Page(Logout,   title="Logout",  icon="🔓", url_path="logout")
 Page_EDA      = st.Page(EDA,      title="EDA",     icon="📊", url_path="eda")
