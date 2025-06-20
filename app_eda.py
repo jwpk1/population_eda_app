@@ -20,10 +20,10 @@ firebase_config = {
     "appId": "1:812186368395:web:be2f7291ce54396209d78e"
 }
 
-firebase  = pyrebase.initialize_app(firebase_config)
-auth      = firebase.auth()
-firestore = firebase.database()
-storage   = firebase.storage()
+firebase   = pyrebase.initialize_app(firebase_config)
+auth       = firebase.auth()
+firestore  = firebase.database()
+storage    = firebase.storage()
 
 # ---------------------
 # 세션 상태 초기화
@@ -49,15 +49,36 @@ class Home:
         st.markdown("""
         ---
         **Population Trends Dataset**  
-        - File: `population_trends.csv`  
-        - Columns:  
-          - `연도`: Year  
-          - `지역`: Region  
-          - `인구`: Population  
-          - `출생아수(명)`: Number of births  
-          - `사망자수(명)`: Number of deaths  
+        - **File:** `population_trends.csv`  
+        - **Columns:**  
+          - `연도` (Year)  
+          - `지역` (Region, KR)  
+          - `인구` (Population)  
+          - `출생아수(명)` (Births)  
+          - `사망자수(명)` (Deaths)  
 
-        Navigate to the **Population Trends EDA** page to begin your analysis.
+        **Region name mapping (KR → EN):**  
+        | 한국어     | English      |
+        |-----------|--------------|
+        | 서울       | Seoul        |
+        | 부산       | Busan        |
+        | 대구       | Daegu        |
+        | 인천       | Incheon      |
+        | 광주       | Gwangju      |
+        | 대전       | Daejeon      |
+        | 울산       | Ulsan        |
+        | 세종       | Sejong       |
+        | 경기       | Gyeonggi-do  |
+        | 강원       | Gangwon-do   |
+        | 충북       | Chungbuk-do  |
+        | 충남       | Chungnam-do  |
+        | 전북       | Jeonbuk-do   |
+        | 전남       | Jeonnam-do   |
+        | 경북       | Gyeongbuk-do |
+        | 경남       | Gyeongnam-do |
+        | 제주       | Jeju-do      |
+
+        좌측 네비게이션에서 **EDA** 페이지로 이동하여 분석을 시작하세요.
         """)
 
 # ---------------------
@@ -183,7 +204,10 @@ class UserInfo:
 # ---------------------
 class Logout:
     def __init__(self):
-        for key in ["logged_in","user_email","id_token","user_name","user_gender","user_phone","profile_image_url"]:
+        for key in [
+            "logged_in","user_email","id_token",
+            "user_name","user_gender","user_phone","profile_image_url"
+        ]:
             st.session_state[key] = False if key == "logged_in" else ""
         st.success("로그아웃 되었습니다.")
         time.sleep(1)
@@ -200,17 +224,20 @@ class EDA:
             st.info("Please upload the population_trends.csv file.")
             return
 
+        # --- 기본 전처리 ---
         df = pd.read_csv(uploaded)
         mask = df['지역'] == '세종'
         df.loc[mask] = df.loc[mask].replace('-', '0')
         for col in ['인구', '출생아수(명)', '사망자수(명)']:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
+        # 탭 구성
         tabs = st.tabs([
-            "기초 통계", "연도별 추이", "지역별 분석", "변화량 분석", "시각화"
+            "기초 통계", "연도별 추이", "지역별 분석",
+            "변화량 분석", "시각화"
         ])
 
-        # 1. Basic Summary
+        # 1. 기초 통계
         with tabs[0]:
             st.header("Basic Summary Statistics")
             buf = io.StringIO()
@@ -220,15 +247,17 @@ class EDA:
             st.subheader("Descriptive Statistics")
             st.dataframe(df.describe())
 
-        # 2. Yearly Trend & Projection
+        # 2. 연도별 전체 인구 추이 & 예측
         with tabs[1]:
             st.header("Yearly Population Trend & Projection")
             df_nat = df[df['지역'] == '전국'].sort_values('연도')
-            years, pops = df_nat['연도'], df_nat['인구']
+            years = df_nat['연도']
+            pops = df_nat['인구']
             last_year = years.max()
             recent = df_nat[df_nat['연도'] > last_year - 3]
             avg_net = (recent['출생아수(명)'] - recent['사망자수(명)']).mean()
             last_pop = pops.iloc[-1]
+
             future_years = list(range(last_year + 1, 2036))
             proj = [int(last_pop + avg_net * (y - last_year)) for y in future_years]
 
@@ -241,7 +270,7 @@ class EDA:
             ax.legend()
             st.pyplot(fig)
 
-        # 3. Regional Change Rankings
+        # 3. 지역별 인구 변화량 순위 (최근 5년)
         with tabs[2]:
             st.header("Regional Population Change Rankings (Last 5 Years)")
             last = df['연도'].max()
@@ -250,7 +279,6 @@ class EDA:
             pivot = df_sel.pivot(index='지역', columns='연도', values='인구').drop(index='전국')
             pivot['change'] = pivot[last] - pivot[prev]
             rank = pivot['change'].reset_index().sort_values('change', ascending=False)
-
             region_map = {
                 '서울':'Seoul','부산':'Busan','대구':'Daegu','인천':'Incheon',
                 '광주':'Gwangju','대전':'Daejeon','울산':'Ulsan','세종':'Sejong',
@@ -267,6 +295,10 @@ class EDA:
             ax.set_title("Population Change by Region (Last 5 Years)")
             ax.set_xlabel("Change (Thousands)")
             st.pyplot(fig)
+            st.markdown(
+                "The bar chart above shows the net change in population over the last five years for each region. "
+                "Regions at the top have experienced the greatest growth, while those at the bottom have seen declines."
+            )
 
             rank['pct_change'] = (rank['change'] / pivot[prev]) * 100
             fig2, ax2 = plt.subplots()
@@ -276,30 +308,35 @@ class EDA:
             ax2.set_title("Population Change Rate by Region (Last 5 Years)")
             ax2.set_xlabel("Change Rate (%)")
             st.pyplot(fig2)
+            st.markdown(
+                "The second chart displays the percentage change relative to the population five years ago, "
+                "highlighting which regions have grown fastest proportionally."
+            )
 
-        # 4. Top Year-over-Year Differences
+        # 4. 연도별 증감 상위 100 사례
         with tabs[3]:
             st.header("Top 100 Year-over-Year Population Differences")
-            df_diff = df.sort_values(['지역','연도'])
+            df_diff = df.sort_values(['지역', '연도'])
             df_diff['diff'] = df_diff.groupby('지역')['인구'].diff()
             df_diff = df_diff[df_diff['지역'] != '전국']
-            top100 = df_diff.nlargest(100, 'diff')[['지역','연도','diff']]
+            top100 = df_diff.nlargest(100, 'diff')[['지역', '연도', 'diff']].copy()
             top100['diff'] = top100['diff'].astype(int)
-
+            top100['region_en'] = top100['지역'].map(region_map)
+            display_df = top100[['region_en','연도','diff']].rename(
+                columns={'region_en':'Region','연도':'Year','diff':'Difference'}
+            )
             styled = (
-                top100
-                .style
-                .format({'diff':'{:,}'})
-                .background_gradient(cmap='RdBu', subset=['diff'], axis=0)
+                display_df.style
+                .format({'Difference':'{:,}'})
+                .background_gradient(cmap='bwr_r', subset=['Difference'], axis=0)
             )
             st.write(styled)
 
-        # 5. Pivot & Stacked Area Visualization
+        # 5. 지역·연도별 누적 영역 그래프
         with tabs[4]:
             st.header("Population by Region & Year (Stacked Area)")
             area_pivot = df.pivot(index='연도', columns='지역', values='인구').drop(columns='전국')
             area_pivot = area_pivot.rename(columns=region_map)
-
             fig, ax = plt.subplots()
             area_pivot.plot.area(ax=ax)
             ax.set_title("Population by Region and Year")
